@@ -7,12 +7,10 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
-
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -87,13 +85,11 @@ struct ov5647_mode_info {
 };
 
 /*!
- * Maintains the information on the current state of the sesor.
+ * Maintains the information on the current state of the sensor.
  */
 static struct sensor_data ov5647_data;
-static int pwn_gpio = -EINVAL;
-static int pwn_active;
-static int rst_gpio = -EINVAL;
-static int rst_active;
+static int pwn_gpio , rst_gpio;
+
 
 static struct reg_value ov5647_setting_30fps_960P_1280_960[] = {
 	{	0x0100	,	0x00	,	0	,	0	}	,
@@ -245,42 +241,37 @@ static struct i2c_driver ov5647_i2c_driver = {
 
 static void ov5647_standby(s32 enable)
 {
-	if (!gpio_is_valid(pwn_gpio))
-		return;
 
+	
 	if (enable)
-		gpio_set_value(pwn_gpio, !pwn_active);
+		gpio_set_value(pwn_gpio, 1);
 	else
-		gpio_set_value(pwn_gpio, pwn_active);
+		gpio_set_value(pwn_gpio, 0);
 	pr_debug("ov5647_mipi_camera_powerdown: powerdown=%x, power_gp=0x%x\n", enable, pwn_gpio);
 	msleep(2);
 }
 
 static void ov5647_reset(void)
 {
-	if (!gpio_is_valid(rst_gpio))
-		return;
-
+	
 	/* camera reset */
-	gpio_set_value(rst_gpio, !rst_active);
+	gpio_set_value(rst_gpio, 1);
 
 	/* camera power dowmn */
-	if (gpio_is_valid(pwn_gpio)) {
-		gpio_set_value(pwn_gpio, 1);
-		msleep(5);
-
-		gpio_set_value(pwn_gpio, 0);
-		msleep(5);
-	}
-
-	gpio_set_value(rst_gpio, rst_active);
-	msleep(1);
-
-	gpio_set_value(rst_gpio, !rst_active);
+	gpio_set_value(pwn_gpio, 1);
 	msleep(5);
 
-	if (gpio_is_valid(pwn_gpio))
-		gpio_set_value(pwn_gpio, !pwn_active);
+	gpio_set_value(pwn_gpio, 0);
+	msleep(5);
+
+	gpio_set_value(rst_gpio, 0);
+	msleep(1);
+
+	gpio_set_value(rst_gpio, 1);
+	msleep(5);
+
+	gpio_set_value(pwn_gpio, 1);
+	
 }
 
 static int ov5647_power_on(struct device *dev)
@@ -1066,6 +1057,7 @@ static int ioctl_g_ifparm(struct v4l2_int_device *s, struct v4l2_ifparm *p)
 	p->u.bt656.bt_sync_correct = 1;  /* Indicate external vsync */
 
 	return 0;
+	
 }
 
 /*!
@@ -1391,7 +1383,7 @@ static int ioctl_enum_framesizes(struct v4l2_int_device *s,
 		return -EINVAL;
 
 	fsize->pixel_format = ov5647_data.pix.pixelformat;
-	fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+	//fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;   //leave defined here?
 	fsize->discrete.width =
 			max(ov5647_mode_info_data[0][fsize->index].width,
 			    ov5647_mode_info_data[1][fsize->index].width);
@@ -1608,36 +1600,39 @@ static int ov5647_probe(struct i2c_client *client,
 	int retval, init;
 	u8 chip_id_high, chip_id_low;
 	struct sensor_data *sensor = &ov5647_data;
-	enum of_gpio_flags flags;
+	//enum of_gpio_flags flags;
 
 	/* request power down pin */
-	pwn_gpio = of_get_named_gpio_flags(dev->of_node, "pwn-gpios", 0, &flags);
-	if (gpio_is_valid(pwn_gpio)) {
+	pwn_gpio = of_get_named_gpio_flags(dev->of_node, "pwn-gpios", 0); //, &flags);
+	
+	if (!gpio_is_valid(pwn_gpio)) {
+		dev_warn(dev, "no sensor pwdn pin available");
+		return -EINVAL;
+	}
 
-		pwn_active = !(flags & OF_GPIO_ACTIVE_LOW);   // changed to active high
-		init = (flags & OF_GPIO_ACTIVE_LOW) ? GPIOF_OUT_INIT_HIGH : GPIOF_OUT_INIT_LOW; 
-
-		retval = devm_gpio_request_one(dev, pwn_gpio, init, "ov5647_mipi_pwdn");
+	retval = devm_gpio_request_one(dev, pwn_gpio, GPIOF_OUT_INIT_HIGH, "ov5647_mipi_pwdn");
 		if (retval < 0) {
 			dev_warn(dev, "request of pwn_gpio failed");
-			pwn_gpio = -EINVAL;
+			pwn_gpio = retval;
 		}
 	} 
 
-	/* request reset pin */
-	rst_gpio = of_get_named_gpio_flags(dev->of_node, "rst-gpios", 0, &flags);
-	if (gpio_is_valid(rst_gpio)) {
-		rst_active = !(flags & OF_GPIO_ACTIVE_LOW);
-		init = (flags & OF_GPIO_ACTIVE_LOW) ? GPIOF_OUT_INIT_HIGH : GPIOF_OUT_INIT_LOW;
-
-		retval = devm_gpio_request_one(dev, rst_gpio, init, "ov5647_mipi_reset");
-		if (retval < 0) {
-			dev_warn(dev, "request of ov5647_mipi_reset failed");
-			rst_gpio = -EINVAL;
-		}
+	/* request reset pin*/
+	
+	rst_gpio = of_get_named_gpio(dev->of_node, "rst-gpios", 0);
+	if (!gpio_is_valid(rst_gpio)) {
+		dev_warn(dev, "no sensor reset pin available");
+		return -EINVAL;
+	}
+	retval = devm_gpio_request_one(dev, rst_gpio, GPIOF_OUT_INIT_HIGH,
+					"ov5647_mipi_reset");
+	if (retval < 0) {
+		dev_warn(dev, "request of ov5647_mipi_reset failed");
+		return retval;
 	}
 
 	/* Set initial values for the sensor struct. */
+	// alternative driver code:  http://www.viionsystems.com/UbuntuImages/ov5647_mipi.c
 	memset(&ov5647_data, 0, sizeof(ov5647_data));
 
 	sensor->mipi_camera = 1;
@@ -1684,7 +1679,7 @@ static int ov5647_probe(struct i2c_client *client,
 	/* real OV5647 pixelformat is V4L2_PIX_FMT_SBGGR10.     */
 	/* i.MX6 CSI CPD convert 10 bits color data to 8 bits.  */
 	/* (see drivers/mxc/ipu3/ipu_capture.c - _ipu_csi_init) */
-	ov5647_data.pix.pixelformat = V4L2_PIX_FMT_SBGGR8;
+	ov5647_data.pix.pixelformat = V4L2_PIX_FMT_SBGGR8;   // could try this per other  deivers if problem V4L2_PIX_FMT_UYVY
 	ov5647_data.pix.width = 1280;
 	ov5647_data.pix.height = 960;
 	ov5647_data.streamcap.capability = V4L2_MODE_HIGHQUALITY |

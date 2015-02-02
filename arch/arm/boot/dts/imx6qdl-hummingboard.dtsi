@@ -186,6 +186,7 @@
 		AVDD-supply = <&reg_3p3v>;
 		DVDD-supply = <&reg_3p3v>;
 		pwn-gpios = <&gpio2 10 GPIO_ACTIVE_HIGH>;
+		// rst-gpios = <>;
 		ipu_id = <0>;
 		csi_id = <1>;
 		mclk = <25000000>;
