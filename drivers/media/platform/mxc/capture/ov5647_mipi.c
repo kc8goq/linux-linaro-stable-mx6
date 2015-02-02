@@ -1611,16 +1611,11 @@ static int ov5647_probe(struct i2c_client *client,
 	enum of_gpio_flags flags;
 
 	/* request power down pin */
-	/* power down pin is ACTIVE HIGH not ACTIVE LOW! (see ov5640_mipi.c) */
 	pwn_gpio = of_get_named_gpio_flags(dev->of_node, "pwn-gpios", 0, &flags);
 	if (gpio_is_valid(pwn_gpio)) {
-<<<<<<< HEAD
+
 		pwn_active = !(flags & OF_GPIO_ACTIVE_LOW);   // changed to active high
-		init = (flags & OF_GPIO_ACTIVE_LOW) ? GPIOF_OUT_INIT_HIGH : GPIOF_OUT_INIT_LOW;
-=======
-		pwn_active = !(flags & OF_GPIO_ACTIVE_HIGH); 
-		init = (flags & OF_GPIO_ACTIVE_HIGH) ? GPIOF_OUT_INIT_LOW : GPIOF_OUT_INIT_HIGH;  //swapped low and high in each instance. unsure of 2nd and 3rd
->>>>>>> f7fbf12474c5177fbe70e32eb44935eae263f366
+		init = (flags & OF_GPIO_ACTIVE_LOW) ? GPIOF_OUT_INIT_HIGH : GPIOF_OUT_INIT_LOW; 
 
 		retval = devm_gpio_request_one(dev, pwn_gpio, init, "ov5647_mipi_pwdn");
 		if (retval < 0) {
