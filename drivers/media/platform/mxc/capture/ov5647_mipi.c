@@ -1599,7 +1599,7 @@ static int ov5647_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct device *dev = &client->dev;
-	int retval, init;
+	int retval = 0;
 	u8 chip_id_high, chip_id_low;
 	struct sensor_data *sensor = &ov5647_data;
 	//enum of_gpio_flags flags;
